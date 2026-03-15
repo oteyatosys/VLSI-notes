@@ -1,1 +1,4 @@
-ipykernel>=6.0
+jupyterlab>=4
+ipykernel>=6
+nbconvert[webpdf]>=7.17.0
+playwright>=1.40

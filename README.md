@@ -33,3 +33,30 @@ If you want browser-based notebooks, install and run JupyterLab:
 pip install jupyterlab
 jupyter lab
 ```
+
+## Export Notebook (VS Code-like Markdown + KaTeX)
+
+This route renders notebook content through `markdown-it` and KaTeX first,
+then prints to PDF:
+
+```bash
+.venv/bin/python scripts/export.py effots.ipynb --pdf
+```
+
+PDF page numbers are enabled by default. Disable them with:
+
+```bash
+.venv/bin/python scripts/export.py effots.ipynb --pdf --no-page-numbers
+```
+
+If Chromium is missing on first run:
+
+```bash
+.venv/bin/playwright install chromium
+```
+
+## Export Notebook (Default nbconvert WebPDF)
+
+```bash
+.venv/bin/jupyter nbconvert --to webpdf --allow-chromium-download effots.ipynb
+```
