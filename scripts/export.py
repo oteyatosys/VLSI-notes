@@ -95,6 +95,8 @@ HTML_TEMPLATE = """<!doctype html>
         linkify: true,
         typographer: true
       });
+      // Preserve LaTeX commands like "\\," until KaTeX processes math.
+      md.disable(["escape"]);
 
       window.addEventListener("load", () => {
         const content = document.getElementById("content");
