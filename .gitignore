@@ -19,3 +19,6 @@ env/
 .mypy_cache/
 .pytest_cache/
 
+# Generated export outputs
+export/*.export.html
+export/*.export.pdf
