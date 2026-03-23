@@ -2,48 +2,80 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pint import UnitRegistry
+
+
+ureg = UnitRegistry()
+
+ureg.formatter.default_format = "C"
+
+_Q = ureg.Quantity  # type: ignore[assignment]
+
+
+def _require_quantity(name: str, value: _Q, dimensionality: str) -> None:
+    if not isinstance(value, _Q):
+        raise TypeError(
+            f"{name} must be a quantity created with design_rules.ureg, got {type(value).__name__}"
+        )
+    if not value.check(dimensionality):
+        raise ValueError(f"{name} must have dimensionality {dimensionality}, got {value.units}")
+
 
 @dataclass(frozen=True)
 class DesignConstants:
     """Process capacitance densities."""
 
-    c_jpa: float  # p+ area cap density [aF/um^2]
-    c_jpp: float  # p+ perimeter cap density [aF/um]
-    c_jna: float  # n+ area cap density [aF/um^2]
-    c_jnp: float  # n+ perimeter cap density [aF/um]
-    c_ox: float   # gate cap density [aF/um^2]
+    c_jpa: _Q  # p+ area cap density [aF/um^2]
+    c_jpp: _Q  # p+ perimeter cap density [aF/um]
+    c_jna: _Q  # n+ area cap density [aF/um^2]
+    c_jnp: _Q  # n+ perimeter cap density [aF/um]
+    c_ox: _Q   # gate cap density [aF/um^2]
+
+    def __post_init__(self) -> None:
+        _require_quantity("c_jpa", self.c_jpa, "[capacitance] / [length] ** 2")
+        _require_quantity("c_jpp", self.c_jpp, "[capacitance] / [length]")
+        _require_quantity("c_jna", self.c_jna, "[capacitance] / [length] ** 2")
+        _require_quantity("c_jnp", self.c_jnp, "[capacitance] / [length]")
+        _require_quantity("c_ox", self.c_ox, "[capacitance] / [length] ** 2")
 
 
 @dataclass(frozen=True)
 class Geometry:
     """Geometry and common diffusion segment lengths [um]."""
 
-    w: float
-    l: float
-    diff_con: float
-    diff_end: float
-    diff_unc: float
+    w: _Q
+    l: _Q
+    diff_con: _Q  # Contacted diffusion segment length
+    diff_end: _Q  # End diffusion segment length
+    diff_unc: _Q  # Uncontacted diffusion segment length
+
+    def __post_init__(self) -> None:
+        _require_quantity("w", self.w, "[length]")
+        _require_quantity("l", self.l, "[length]")
+        _require_quantity("diff_con", self.diff_con, "[length]")
+        _require_quantity("diff_end", self.diff_end, "[length]")
+        _require_quantity("diff_unc", self.diff_unc, "[length]")
 
 
 @dataclass(frozen=True)
 class CapacitanceTerms:
     """Precomputed capacitance terms [aF] for common segment types."""
 
-    c_p_con: float
-    c_p_end: float
-    c_p_unc: float
-    c_n_con: float
-    c_n_end: float
-    c_n_unc: float
-    c_gate: float
+    c_p_con: _Q
+    c_p_end: _Q
+    c_p_unc: _Q
+    c_n_con: _Q
+    c_n_end: _Q
+    c_n_unc: _Q
+    c_gate: _Q
 
 
 DEFAULT_GEOMETRY = Geometry(
-    w=0.20,
-    l=0.10,
-    diff_con=0.26,
-    diff_end=0.23,
-    diff_unc=0.15,
+    w=0.20 * ureg.um,
+    l=0.10 * ureg.um,
+    diff_con=0.26 * ureg.um,
+    diff_end=0.23 * ureg.um,
+    diff_unc=0.15 * ureg.um,
 )
 
 
@@ -53,29 +85,40 @@ class CapacitanceModel:
     geometry: Geometry = DEFAULT_GEOMETRY
 
     @staticmethod
-    def _junction_cap(w: float, l: float, area_density: float, perim_density: float) -> float:
+    def _junction_cap(
+        w: _Q,
+        l: _Q,
+        area_density: _Q,
+        perim_density: _Q,
+    ) -> _Q:
+        _require_quantity("w", w, "[length]")
+        _require_quantity("l", l, "[length]")
+        _require_quantity("area_density", area_density, "[capacitance] / [length] ** 2")
+        _require_quantity("perim_density", perim_density, "[capacitance] / [length]")
         area = w * l
-        perimeter = 2.0 * (w + l)
+        perimeter = 2 * (w + l)
         return area_density * area + perim_density * perimeter
 
-    def c_p(self, w: float, l: float) -> float:
+    def c_p(self, w: _Q, l: _Q) -> _Q:
         c = self.constants
         return self._junction_cap(w, l, c.c_jpa, c.c_jpp)
 
-    def c_n(self, w: float, l: float) -> float:
+    def c_n(self, w: _Q, l: _Q) -> _Q:
         c = self.constants
         return self._junction_cap(w, l, c.c_jna, c.c_jnp)
 
-    def c_g(self, w: float, l: float) -> float:
+    def c_g(self, w: _Q, l: _Q) -> _Q:
+        _require_quantity("w", w, "[length]")
+        _require_quantity("l", l, "[length]")
         return self.constants.c_ox * w * l
 
     def _explain_junction(
         self,
         label: str,
-        w: float,
-        l: float,
-        area_density: float,
-        perim_density: float,
+        w: _Q,
+        l: _Q,
+        area_density: _Q,
+        perim_density: _Q,
         area_name: str,
         perim_name: str,
     ) -> list[str]:
@@ -92,15 +135,15 @@ class CapacitanceModel:
             f"{label} = {area_term:.5f} + {perim_term:.5f} = {total:.5f} aF",
         ]
 
-    def explain_c_p(self, w: float, l: float) -> list[str]:
+    def explain_c_p(self, w: _Q, l: _Q) -> list[str]:
         c = self.constants
         return self._explain_junction("C_p", w, l, c.c_jpa, c.c_jpp, "C_jpa", "C_jpp")
 
-    def explain_c_n(self, w: float, l: float) -> list[str]:
+    def explain_c_n(self, w: _Q, l: _Q) -> list[str]:
         c = self.constants
         return self._explain_junction("C_n", w, l, c.c_jna, c.c_jnp, "C_jna", "C_jnp")
 
-    def explain_c_g(self, w: float, l: float) -> list[str]:
+    def explain_c_g(self, w: _Q, l: _Q) -> list[str]:
         c_ox = self.constants.c_ox
         cap = self.c_g(w, l)
         return [
@@ -143,17 +186,17 @@ class CapacitanceModel:
 
 # From your notebook:
 DEFAULT_90NM = DesignConstants(
-    c_jpa=1462.0,
-    c_jpp=30.0,
-    c_jna=1392.0,
-    c_jnp=20.0,
-    c_ox=21570.0,
+    c_jpa=1462.0 * ureg.aF / ureg.um**2,
+    c_jpp=30.0 * ureg.aF / ureg.um,
+    c_jna=1392.0 * ureg.aF / ureg.um**2,
+    c_jnp=20.0 * ureg.aF / ureg.um,
+    c_ox=21570.0 * ureg.aF / ureg.um**2,
 )
 
 F16_EXAM = DesignConstants(
-    c_jpa=1462.0,
-    c_jpp=30.0,
-    c_jna=1601.0,
-    c_jnp=23.0,
-    c_ox=22500.0,
+    c_jpa=1462.0 * ureg.aF / ureg.um**2,
+    c_jpp=30.0 * ureg.aF / ureg.um,
+    c_jna=1601.0 * ureg.aF / ureg.um**2,
+    c_jnp=23.0 * ureg.aF / ureg.um,
+    c_ox=22500.0 * ureg.aF / ureg.um**2,
 )
